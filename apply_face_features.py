@@ -39,17 +39,16 @@ def identify(image, data) -> tuple[str, dict]:
     encodings = face_recognition.face_encodings(image)
     if encodings:
         for encoding in encodings:
-            distances = face_recognition.face_distance(data['encodings'], encoding)
-            min_arg = distances.argmin()
-            if distances[min_arg] > TOLERANCE:
-                continue
-            name = data['names'][min_arg]
-            counts[name] = counts.get(name, []) + [distances[min_arg]]
+            matches = face_recognition.compare_faces(data['encodings'], encoding)
 
-        if counts:
-            for i_name in counts.keys():
-                counts[i_name] = 1 / sum(1/d for d in counts[i_name])
-            name = min(counts, key=counts.get)
+            if True not in matches:
+                continue
+
+            match_idxs = [i for i, b in enumerate(matches) if b]
+            for i in match_idxs:
+                name = data['names'][i]
+                counts[name] = counts.get(name, 0) + 1
+            name = max(counts, key=counts.get)
 
     return name, counts
 
@@ -58,39 +57,13 @@ def analyse_image(image_file: str, data):
     image = cv2.imread(image_file)
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # faces = face_cascade.detectMultiScale(gray_image,
-    #                                       scaleFactor=1.1,
-    #                                       minNeighbors=5,
-    #                                       minSize=(30, 30),
-    #                                       flags=cv2.CASCADE_SCALE_IMAGE)
-
-    # locate faces
-    faces = face_recognition.face_locations(gray_image, model="hog")
+    faces = face_cascade.detectMultiScale(gray_image,
+                                          scaleFactor=1.1,
+                                          minNeighbors=5,
+                                          minSize=(30, 30),
+                                          flags=cv2.CASCADE_SCALE_IMAGE)
 
     names, counters = [], []
-
-    # encodings = face_recognition.face_encodings(rgb_image, faces)
-    # print(f"Found {len(encodings)} encodings", end=" ")
-    #
-    # if encodings:
-    #     for encoding in encodings:
-    #         distances = face_recognition.face_distance(data['encodings'], encoding)
-    #         best_match = distances.argmin() if distances.min() <= TOLERANCE else None
-    #
-    #         name = "Unknown"
-    #         counts = {}
-    #         if best_match is not None:
-    #             for i in distances.argsort()[:3]:
-    #                 name = data['names'][i]
-    #                 counts[name] = distances[i]
-    #
-    #             name = data['names'][best_match]
-    #
-    #         print(name, end=" ")
-    #         print(classifier(data).predict(encoding.reshape(1, -1)))
-    #         names.append(name)
-    #         counters.append(counts)
-
     for box in faces:
         name, counts = identify(sub_image(rgb_image, box), data)
         names.append(name)
@@ -108,17 +81,17 @@ def analyse_image(image_file: str, data):
 
 if __name__ == "__main__":
 
-    base_path = Path("./avengers")
+    base_path = Path("./turcos")
     force_new_encodings = True
 
     if not (base_path / "face_enc").exists() or force_new_encodings:
-        find_encodings(base_path, "face_enc", xml_file)
+        find_encodings(base_path, "face_enc", None)
     data = pickle.loads((base_path / "face_enc").read_bytes())
 
     print(data['names'])
 
     for i, image_path in enumerate((base_path / "subjects").iterdir()):
-        if i != 1:
-            continue
+        # if i != 2:
+        #     continue
         analyse_image(image_path.as_posix(), data)
     cv2.waitKey(0)
