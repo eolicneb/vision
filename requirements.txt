@@ -1,0 +1,6 @@
+opencv-contrib-python
+cmake
+dlib
+face_recognition
+imutils
+scikit-learn
