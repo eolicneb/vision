@@ -39,22 +39,24 @@ def identify(image, data) -> tuple[str, dict]:
     encodings = face_recognition.face_encodings(image)
     if encodings:
         for encoding in encodings:
-            matches = face_recognition.compare_faces(data['encodings'], encoding)
+            distances = face_recognition.face_distance(data['encodings'], encoding)
 
-            if True not in matches:
+            match_idxs = [i for i, b in enumerate(distances) if b < TOLERANCE]
+
+            if not match_idxs:
                 continue
 
-            match_idxs = [i for i, b in enumerate(matches) if b]
             for i in match_idxs:
                 name = data['names'][i]
-                counts[name] = counts.get(name, 0) + 1
-            name = max(counts, key=counts.get)
+                counts[name] = min(counts.get(name, TOLERANCE), distances[i])
+
+            if counts:
+                name = min(counts, key=counts.get)
 
     return name, counts
 
 
-def analyse_image(image_file: str, data):
-    image = cv2.imread(image_file)
+def analyse_image(image, data, show=True):
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(gray_image,
@@ -76,22 +78,33 @@ def analyse_image(image_file: str, data):
             cv2.putText(image, f"{c_name}: {count}", (x, y+h+11+i*11),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
 
-    cv2.imshow(image_file, image)
+    if show:
+        cv2.imshow("Result", image)
+
+
+def retrieve_data(folders: list, force_new_encodings=False):
+    names, encodings = [], []
+    for folder in folders:
+        base_path = Path(folder)
+        force_new_encodings = False
+
+        if not (base_path / "face_enc").exists() or force_new_encodings:
+            find_encodings(base_path, "face_enc", None)
+        data = pickle.loads((base_path / "face_enc").read_bytes())
+        names.extend(data['names'])
+        encodings.extend(data['encodings'])
+    return {'names': names, 'encodings': encodings}
 
 
 if __name__ == "__main__":
 
-    base_path = Path("./turcos")
-    force_new_encodings = True
-
-    if not (base_path / "face_enc").exists() or force_new_encodings:
-        find_encodings(base_path, "face_enc", None)
-    data = pickle.loads((base_path / "face_enc").read_bytes())
-
+    data = retrieve_data(['famibia', 'avengers'], force_new_encodings=True)
     print(data['names'])
 
+    base_path = Path('famibia')
     for i, image_path in enumerate((base_path / "subjects").iterdir()):
         # if i != 2:
         #     continue
-        analyse_image(image_path.as_posix(), data)
-    cv2.waitKey(0)
+        image = cv2.imread(image_path.as_posix())
+        analyse_image(image, data)
+        cv2.waitKey(0)
